@@ -1,0 +1,15 @@
+[package]
+name = "cargo-forkdep"
+version = "0.1.0"
+edition = "2021"
+description = "Does the initial grunt work to help you develop a patch for one of your dependencies"
+license = "MIT OR Apache-2.0"
+keywords = ["development", "patch", "git"]
+categories = ["command-line-utilities", "development-tools"]
+rust-version = "1.62.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+git2 = "0.15"
+octocrab = "0.16.0"
