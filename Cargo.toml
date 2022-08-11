@@ -1,3 +1,6 @@
+#[patch.crates-io]
+#anyhow = { path = "https:/www.github.com/dtolnay/anyhow" }
+
 [package]
 name = "cargo-forkdep"
 version = "0.1.0"

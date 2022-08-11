@@ -1,16 +1,21 @@
 use anyhow::{anyhow, Result};
 use cargo::{
-    core::{package_id, EitherManifest, Manifest, PackageSet, SourceId, SourceMap, Dependency, Package, Workspace},
+    core::{
+        package_id, Dependency, EitherManifest, Manifest, Package, PackageSet, SourceId, SourceMap,
+        Workspace,
+    },
     ops::{generate_lockfile, load_pkg_lockfile},
     sources::{GitSource, RegistrySource},
     util::{config::Config, important_paths::find_root_manifest_for_wd, toml::TomlManifest},
 };
 use clap::Parser;
-use toml_edit::{Item, Table, value};
 use std::{
     collections::HashSet,
-    path::{Path, PathBuf}, fs, str::FromStr,
+    fs,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
+use toml_edit::{toml, value, Document, Item, Table, InlineTable};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 #[clap(name = "cargo")]
@@ -38,9 +43,39 @@ fn main() -> Result<()> {
     let mut workspace = Workspace::new(&manifest_path, &config)?;
     let repo = get_repo(&mut workspace, &args.dependency)?;
     let mut manifest = read_manifest(&manifest_path)?;
-    manifest["patch"]["crates.io"][args.dependency]["git"] = value(repo);
+    let patch_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not find parent directory of manifest"))?;
+    let dep_path = fork_repo(repo, patch_dir)?;
+    insert_patch(&mut manifest, dep_path, args.dependency)?;
     fs::write(manifest_path, manifest.to_string())?;
-    //["patch"]["crates.io"][args.dependency]["git"] = <Item as FromStr>::from_str(&format!("\"{repo}\""))?;
+    Ok(())
+}
+
+fn fork_repo(repo: String, anyhow: &Path) -> Result<&Path> {
+    todo!()
+}
+
+fn insert_patch(manifest: &mut Document, path: &Path, dep: String) -> Result<()> {
+    let patch = manifest
+        .as_table_mut()
+        .entry("patch")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| anyhow!("patch is not a Table"))?;
+    patch.set_implicit(true);
+    let crates_io = patch
+        .entry("crates-io")
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| anyhow!("crates-io is not a Table"))?;
+    let dependency = crates_io
+        .entry(&dep)
+        .or_insert_with(|| Item::Value(InlineTable::new().into()))
+        .as_inline_table_mut()
+        .ok_or_else(|| anyhow!("dependency is not an InlineTable"))?;
+    let path_entry = dependency
+        .entry("path")
+        .or_insert_with(|| InlineTable::new().into());
+    *path_entry = path.to_str().ok_or_else(|| anyhow!("Could not write patch path to file"))?.into();
     Ok(())
 }
 
@@ -70,7 +105,7 @@ fn get_repo(workspace: &Workspace, dependency: &str) -> Result<String> {
             let pkg_set = PackageSet::new(&deps, sources, config)?;
             let package = pkg_set.get_one(dep_id)?;
             if let Some(repo) = &package.manifest().metadata().repository {
-                return Ok(repo.clone())
+                return Ok(repo.clone());
             }
         }
     }
