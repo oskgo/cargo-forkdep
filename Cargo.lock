@@ -216,6 +216,7 @@ dependencies = [
  "clap",
  "git2",
  "octocrab",
+ "toml_edit",
 ]
 
 [[package]]
