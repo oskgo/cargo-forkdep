@@ -6,7 +6,7 @@ use cargo::{
     util::{config::Config, important_paths::find_root_manifest_for_wd, toml::TomlManifest},
 };
 use clap::Parser;
-use toml_edit::Item;
+use toml_edit::{Item, Table, value};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf}, fs, str::FromStr,
@@ -37,12 +37,14 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| find_root_manifest_for_wd(&std::env::current_dir()?))?;
     let mut workspace = Workspace::new(&manifest_path, &config)?;
     let repo = get_repo(&mut workspace, &args.dependency)?;
-    let mut manifest = dbg!(read_manifest(manifest_path)?);
-    manifest["patch"]["crates.io"][args.dependency]["git"] = <Item as FromStr>::from_str(&repo)?;
+    let mut manifest = read_manifest(&manifest_path)?;
+    manifest["patch"]["crates.io"][args.dependency]["git"] = value(repo);
+    fs::write(manifest_path, manifest.to_string())?;
+    //["patch"]["crates.io"][args.dependency]["git"] = <Item as FromStr>::from_str(&format!("\"{repo}\""))?;
     Ok(())
 }
 
-fn read_manifest(manifest_path: PathBuf) -> Result<toml_edit::Document> {
+fn read_manifest(manifest_path: &Path) -> Result<toml_edit::Document> {
     let data = fs::read_to_string(&manifest_path)?;
     Ok(data.parse()?)
 }
