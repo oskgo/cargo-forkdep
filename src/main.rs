@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use cargo::{
     core::{
         package_id, Dependency, EitherManifest, Manifest, Package, PackageSet, SourceId, SourceMap,
@@ -9,11 +9,14 @@ use cargo::{
     util::{config::Config, important_paths::find_root_manifest_for_wd, toml::TomlManifest},
 };
 use clap::Parser;
+use git2::Repository;
+use octocrab::{repos::RepoHandler, Octocrab};
+use once_cell::sync::Lazy;
 use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    str::FromStr,
+    str::FromStr, sync::Arc
 };
 use toml_edit::{toml, value, Document, Item, Table, InlineTable};
 
@@ -33,7 +36,8 @@ struct Forkdep {
     manifest_path: Option<PathBuf>,
 }
 
-fn main() -> Result<()> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<()> {
     let Cargo::Forkdep(args) = Cargo::parse();
     let config = Config::default()?;
     let manifest_path: PathBuf = args
@@ -44,14 +48,27 @@ fn main() -> Result<()> {
     let repo = get_repo(&mut workspace, &args.dependency)?;
     let mut manifest = read_manifest(&manifest_path)?;
     let patch_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not find parent directory of manifest"))?;
-    let dep_path = fork_repo(repo, patch_dir)?;
-    insert_patch(&mut manifest, dep_path, args.dependency)?;
+    let dep_path = fork_repo(&repo, patch_dir).await?;
+    insert_patch(&mut manifest, &dep_path, args.dependency)?;
     fs::write(manifest_path, manifest.to_string())?;
     Ok(())
 }
 
-fn fork_repo(repo: String, anyhow: &Path) -> Result<&Path> {
-    todo!()
+async fn fork_repo(url: &str, dir: &Path) -> Result<PathBuf> {
+    let repo = url_to_repo(url)?;
+    let new_repo = repo.create_fork().send().await?;
+    let new_url = new_repo.url;
+    let root_repo = Repository::open(dir)?;
+    let mut submodule = root_repo.submodule(new_url.as_str(), Path::new("patches"), false)?;
+    submodule.clone(None)?;
+    Ok(submodule.path().to_owned())
+}
+
+static OCTOCRAB: Lazy<Arc<Octocrab>> = Lazy::new(|| octocrab::instance());
+
+fn url_to_repo(url: &str) -> Result<RepoHandler> {
+    let [repo, owner]: [&str; 2] = url.split('/').rev().take(2).collect::<Vec<_>>().try_into().map_err(|_| anyhow!("could not parse url {}", url))?;
+    Ok(OCTOCRAB.repos(owner, repo))
 }
 
 fn insert_patch(manifest: &mut Document, path: &Path, dep: String) -> Result<()> {
