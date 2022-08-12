@@ -1,6 +1,3 @@
-#[patch.crates-io]
-#anyhow = { path = "https:/www.github.com/dtolnay/anyhow" }
-
 [package]
 name = "cargo-forkdep"
 version = "0.1.0"
@@ -14,15 +11,10 @@ rust-version = "1.63.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-git2 = "0.14"
-octocrab = "0.16.0"
-cargo = "0.63.1"
-anyhow = "1.0.60"
-clap = { version = "3.2.16", features = ["derive"] }
-toml_edit = "0.14.4"
-tokio = { version = "1.20.1", features = ["rt", "macros"] }
-reqwest = "0.11.11"
-webbrowser = "0.7.1"
-
-
-#yup-oauth2 = "7.0.1"
+git2 = "0.14.*"
+octocrab = "0.16.*"
+cargo = "0.64.*"
+anyhow = "1.0.*"
+clap = { version = "3.2.*", features = ["derive"] }
+toml_edit = "0.14.*"
+webbrowser = "0.7.*"

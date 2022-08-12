@@ -1,28 +1,21 @@
 use anyhow::{anyhow, Result};
 use cargo::{
-    core::{
-        PackageSet, SourceMap,
-        Workspace,
-    },
+    core::{PackageSet, SourceMap, Workspace},
     ops::{generate_lockfile, load_pkg_lockfile},
-    util::{config::Config, important_paths::find_root_manifest_for_wd, ConfigValue},
+    util::{config::Config, important_paths::find_root_manifest_for_wd},
 };
 use clap::Parser;
 use git2::Repository;
-use octocrab::{repos::RepoHandler, Octocrab, auth::Auth, OctocrabBuilder};
-use reqwest::Url;
+
 use std::{
     collections::HashSet,
     fs,
-    path::{Path, PathBuf}, sync::Arc, rc::Rc
+    path::{Path, PathBuf},
 };
-use toml_edit::{Document, Item, Table, InlineTable};
+use toml_edit::{Document, InlineTable, Item, Table};
+use webbrowser::open;
 
-const CLIENT_ID: &str = "db1c925e78b9daa437ed";
-
-const SCOPE: &str = "repo";
-
-#[derive(Parser, Debug)] // requires `derive` feature
+#[derive(Parser, Debug)]
 #[clap(name = "cargo")]
 #[clap(bin_name = "cargo")]
 enum Cargo {
@@ -38,42 +31,46 @@ struct Forkdep {
     manifest_path: Option<PathBuf>,
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let Cargo::Forkdep(args) = Cargo::parse();
     let config = Config::default()?;
     let manifest_path: PathBuf = args
         .manifest_path
-        .map(|v| Ok(v))
+        .map(Ok)
         .unwrap_or_else(|| find_root_manifest_for_wd(&std::env::current_dir()?))?;
-    let mut workspace = Workspace::new(&manifest_path, &config)?;
-    let repo = get_repo(&mut workspace, &args.dependency)?;
+    let workspace = Workspace::new(&manifest_path, &config)?;
+    let repo = get_repo(&workspace, &args.dependency)?;
     let mut manifest = read_manifest(&manifest_path)?;
-    let patch_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not find parent directory of manifest"))?;
-    let dep_path = make_local_copy(&repo, patch_dir).await?;
+    let patch_dir = manifest_path
+        .parent()
+        .ok_or_else(|| anyhow!("could not find parent directory of manifest"))?;
+    let dep_path = make_local_copy(&repo, patch_dir, &args.dependency)?;
     insert_patch(&mut manifest, &dep_path, args.dependency)?;
     fs::write(manifest_path, manifest.to_string())?;
     Ok(())
 }
 
-async fn make_local_copy(url: &str, dir: &Path) -> Result<PathBuf> {
-    let new_url = fork_repo(url).await?;
+fn make_local_copy(url: &str, dir: &Path, dep_name: &str) -> Result<PathBuf> {
+    let new_url = fork_repo(url)?;
     let root_repo = Repository::open(dir)?;
-    let mut submodule = root_repo.submodule(new_url.as_str(), Path::new("patches"), false)?;
+    let mut submodule =
+        root_repo.submodule(&new_url, Path::new(&format!("patches/{dep_name}")), false)?;
     submodule.clone(None)?;
     Ok(submodule.path().to_owned())
 }
 
-async fn fork_repo(url: &str) -> Result<Url> {
-    let repo = url.split('/').last().ok_or_else(|| anyhow!("could not parse url {}", url.clone()))?;
-    if !webbrowser::open(url).is_ok() {
+fn fork_repo(url: &str) -> Result<String> {
+    let repo = url
+        .split('/')
+        .last()
+        .ok_or_else(|| anyhow!("could not parse url {}", url))?;
+    if open(url).is_err() {
         println!("fork the repository at {}", url);
     }
     let mut owner = String::new();
     println!("Enter the name of the owner of the fork: ");
     std::io::stdin().read_line(&mut owner)?;
-    let new_url = Url::parse(&format!("https://www.github.com/{owner}/{repo}"))?;
-    Ok(new_url)
+    Ok(format!("https://www.github.com/{owner}/{repo}"))
 }
 
 fn insert_patch(manifest: &mut Document, path: &Path, dep: String) -> Result<()> {
@@ -97,7 +94,10 @@ fn insert_patch(manifest: &mut Document, path: &Path, dep: String) -> Result<()>
     let path_entry = dependency
         .entry("path")
         .or_insert_with(|| InlineTable::new().into());
-    *path_entry = path.to_str().ok_or_else(|| anyhow!("Could not write patch path to file"))?.into();
+    *path_entry = path
+        .to_str()
+        .ok_or_else(|| anyhow!("Could not write patch path to file"))?
+        .into();
     Ok(())
 }
 
@@ -108,11 +108,11 @@ fn read_manifest(manifest_path: &Path) -> Result<toml_edit::Document> {
 
 fn get_repo(workspace: &Workspace, dependency: &str) -> Result<String> {
     let config = workspace.config();
-    let lockfile = match load_pkg_lockfile(&*workspace)? {
+    let lockfile = match load_pkg_lockfile(workspace)? {
         Some(lockfile) => lockfile,
         None => {
-            generate_lockfile(&*workspace)?;
-            load_pkg_lockfile(&*workspace)?.ok_or_else(|| anyhow!("Failed to generate lockfile"))?
+            generate_lockfile(workspace)?;
+            load_pkg_lockfile(workspace)?.ok_or_else(|| anyhow!("Failed to generate lockfile"))?
         }
     };
     for package in workspace.members() {
