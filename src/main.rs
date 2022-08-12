@@ -70,6 +70,7 @@ fn fork_repo(url: &str) -> Result<String> {
     let mut owner = String::new();
     println!("Enter the name of the owner of the fork: ");
     std::io::stdin().read_line(&mut owner)?;
+    let owner = owner.trim();
     Ok(format!("https://www.github.com/{owner}/{repo}"))
 }
 
