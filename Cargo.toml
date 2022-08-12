@@ -1,6 +1,6 @@
 [package]
 name = "cargo-forkdep"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Does the initial grunt work to help you develop a patch for one of your dependencies"
 license = "MIT OR Apache-2.0"
