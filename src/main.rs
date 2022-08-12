@@ -1,24 +1,26 @@
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Result};
 use cargo::{
     core::{
-        package_id, Dependency, EitherManifest, Manifest, Package, PackageSet, SourceId, SourceMap,
+        PackageSet, SourceMap,
         Workspace,
     },
     ops::{generate_lockfile, load_pkg_lockfile},
-    sources::{GitSource, RegistrySource},
-    util::{config::Config, important_paths::find_root_manifest_for_wd, toml::TomlManifest},
+    util::{config::Config, important_paths::find_root_manifest_for_wd, ConfigValue},
 };
 use clap::Parser;
 use git2::Repository;
-use octocrab::{repos::RepoHandler, Octocrab};
-use once_cell::sync::Lazy;
+use octocrab::{repos::RepoHandler, Octocrab, auth::Auth, OctocrabBuilder};
+use reqwest::Url;
 use std::{
     collections::HashSet,
     fs,
-    path::{Path, PathBuf},
-    str::FromStr, sync::Arc
+    path::{Path, PathBuf}, sync::Arc, rc::Rc
 };
-use toml_edit::{toml, value, Document, Item, Table, InlineTable};
+use toml_edit::{Document, Item, Table, InlineTable};
+
+const CLIENT_ID: &str = "db1c925e78b9daa437ed";
+
+const SCOPE: &str = "repo";
 
 #[derive(Parser, Debug)] // requires `derive` feature
 #[clap(name = "cargo")]
@@ -48,27 +50,30 @@ async fn main() -> Result<()> {
     let repo = get_repo(&mut workspace, &args.dependency)?;
     let mut manifest = read_manifest(&manifest_path)?;
     let patch_dir = manifest_path.parent().ok_or_else(|| anyhow!("could not find parent directory of manifest"))?;
-    let dep_path = fork_repo(&repo, patch_dir).await?;
+    let dep_path = make_local_copy(&repo, patch_dir).await?;
     insert_patch(&mut manifest, &dep_path, args.dependency)?;
     fs::write(manifest_path, manifest.to_string())?;
     Ok(())
 }
 
-async fn fork_repo(url: &str, dir: &Path) -> Result<PathBuf> {
-    let repo = url_to_repo(url)?;
-    let new_repo = repo.create_fork().send().await?;
-    let new_url = new_repo.url;
+async fn make_local_copy(url: &str, dir: &Path) -> Result<PathBuf> {
+    let new_url = fork_repo(url).await?;
     let root_repo = Repository::open(dir)?;
     let mut submodule = root_repo.submodule(new_url.as_str(), Path::new("patches"), false)?;
     submodule.clone(None)?;
     Ok(submodule.path().to_owned())
 }
 
-static OCTOCRAB: Lazy<Arc<Octocrab>> = Lazy::new(|| octocrab::instance());
-
-fn url_to_repo(url: &str) -> Result<RepoHandler> {
-    let [repo, owner]: [&str; 2] = url.split('/').rev().take(2).collect::<Vec<_>>().try_into().map_err(|_| anyhow!("could not parse url {}", url))?;
-    Ok(OCTOCRAB.repos(owner, repo))
+async fn fork_repo(url: &str) -> Result<Url> {
+    if !webbrowser::open(url).is_ok() {
+        println!("fork the repository at {}", url);
+    }
+    let repo = url.split('/').last().ok_or_else(|| anyhow!("could not parse url {}", url.clone()))?;
+    let mut owner = String::new();
+    println!("Enter the name of the owner of the fork: ");
+    std::io::stdin().read_line(&mut owner)?;
+    let new_url = Url::parse(&format!("https://www.github.com/{owner}/{repo}"))?;
+    Ok(new_url)
 }
 
 fn insert_patch(manifest: &mut Document, path: &Path, dep: String) -> Result<()> {

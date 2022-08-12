@@ -9,7 +9,7 @@ description = "Does the initial grunt work to help you develop a patch for one o
 license = "MIT OR Apache-2.0"
 keywords = ["development", "patch", "git"]
 categories = ["command-line-utilities", "development-tools"]
-rust-version = "1.62.0"
+rust-version = "1.63.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,9 +20,9 @@ cargo = "0.63.1"
 anyhow = "1.0.60"
 clap = { version = "3.2.16", features = ["derive"] }
 toml_edit = "0.14.4"
-once_cell = "1.13.0"
 tokio = { version = "1.20.1", features = ["rt", "macros"] }
+reqwest = "0.11.11"
+webbrowser = "0.7.1"
 
-[build-dependencies]
-yup-oauth2 = "7.0.1"
-anyhow = "1.0.60"
+
+#yup-oauth2 = "7.0.1"
