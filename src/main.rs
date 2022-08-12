@@ -65,10 +65,10 @@ async fn make_local_copy(url: &str, dir: &Path) -> Result<PathBuf> {
 }
 
 async fn fork_repo(url: &str) -> Result<Url> {
+    let repo = url.split('/').last().ok_or_else(|| anyhow!("could not parse url {}", url.clone()))?;
     if !webbrowser::open(url).is_ok() {
         println!("fork the repository at {}", url);
     }
-    let repo = url.split('/').last().ok_or_else(|| anyhow!("could not parse url {}", url.clone()))?;
     let mut owner = String::new();
     println!("Enter the name of the owner of the fork: ");
     std::io::stdin().read_line(&mut owner)?;
